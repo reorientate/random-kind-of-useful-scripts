@@ -6,7 +6,7 @@ def _bounded(word: str) -> str:
     right = r'\b' if word[-1].isalnum() or word[-1] == '_' else ''
     return f"{left}{esc}{right}"
 
-def gxt(text: str, r: int, g: int, b: int, words: list[str] = None) -> str:
+def xcol_ex(text: str, r: int, g: int, b: int, words: list[str] = None) -> str:
     # formula to approximate 256 color
     r_idx = int(r / 255 * 5)
     g_idx = int(g / 255 * 5)
@@ -22,11 +22,11 @@ def gxt(text: str, r: int, g: int, b: int, words: list[str] = None) -> str:
 
     return f"{color}{text}{reset}"
 
-if "__name__" == "__main__":
-	print(gxt_ex.gxt("████████████████████ This is dark pink", 198, 71, 148, ["████████████████████", "dark pink"]))
-	print(gxt_ex.gxt("████████████████████ This is pink", 251, 168, 250, ["████████████████████", "pink"]))
-	print(gxt_ex.gxt("████████████████████ This is white", 225, 255, 255, ["████████████████████", "white"]))
-	print(gxt_ex.gxt("████████████████████ This is blue", 75, 196, 244, ["████████████████████", "blue"]))
-	print(gxt_ex.gxt("████████████████████ This is white", 225, 255, 255, ["████████████████████", "white"]))
-	print(gxt_ex.gxt("████████████████████ This is pink", 251, 168, 250, ["████████████████████", "pink"]))
-	print(gxt_ex.gxt("████████████████████ This is dark pink", 198, 71, 148, ["████████████████████", "dark pink"]))
+if __name__ == "__main__":
+    print(xcol_ex("████████████████████ This is dark pink", 198, 71, 148, ["████████████████████", "dark pink"]))
+    print(xcol_ex("████████████████████ This is pink", 251, 168, 250, ["████████████████████", "pink"]))
+    print(xcol_ex("████████████████████ This is white", 225, 255, 255, ["████████████████████", "white"]))
+    print(xcol_ex("████████████████████ This is blue", 75, 196, 244, ["████████████████████", "blue"]))
+    print(xcol_ex("████████████████████ This is white", 225, 255, 255, ["████████████████████", "white"]))
+    print(xcol_ex("████████████████████ This is pink", 251, 168, 250, ["████████████████████", "pink"]))
+    print(xcol_ex("████████████████████ This is dark pink", 198, 71, 148, ["████████████████████", "dark pink"]))
