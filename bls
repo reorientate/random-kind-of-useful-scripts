@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""
+bls — a better ls with colors
+"""
+
+import os, sys, stat, time, grp, pwd, argparse, math
+from pathlib import Path
+
+RESET = "\033[0m"
+BOLD  = "\033[1m"
+DIM   = "\033[2m"
+
+def rgb(r, g, b):  return f"\033[38;2;{r};{g};{b}m"
+
+C_DIR     = rgb(87,  181, 255)   # bright sky blue
+C_LINK    = rgb(200, 150, 255)   # bright lavender
+C_EXEC    = rgb(80,  220, 120)   # bright green
+C_ARCHIVE = rgb(255, 140,  60)   # bright orange
+C_MEDIA   = rgb(255, 120, 180)   # bright pink
+C_DOC     = rgb(255, 215,  80)   # bright yellow
+C_CODE    = rgb(80,  220, 210)   # bright teal
+C_DATA    = rgb(130, 200, 255)   # bright light blue
+C_HIDDEN  = rgb(130, 140, 160)   # medium gray
+C_SPECIAL = rgb(255,  80,  80)   # bright red
+C_SIZE    = rgb(130, 210, 160)   # soft green
+C_DATE    = rgb(170, 185, 210)   # steel blue
+C_PERMS   = rgb(160, 175, 200)   # muted blue
+C_USER    = rgb(255, 215,  80)   # yellow
+C_GROUP   = rgb(130, 200, 255)   # light blue
+C_SECTION = rgb(100, 115, 140)   # section header gray
+C_COUNT   = rgb(130, 210, 160)   # soft green
+C_LINKTGT = rgb(130, 140, 160)   # gray
+C_NLINK   = rgb(180, 190, 210)   # visible gray
+
+ARCHIVE_EXT = {'.tar','.gz','.bz2','.xz','.zip','.7z','.rar','.tgz','.zst','.lz4'}
+MEDIA_EXT   = {'.mp4','.mkv','.avi','.mov','.mp3','.flac','.wav','.ogg',
+               '.jpg','.jpeg','.png','.gif','.webp','.svg','.bmp','.tiff',
+               '.m4a','.m4v','.webm','.opus','.heic','.avif'}
+DOC_EXT     = {'.pdf','.doc','.docx','.xls','.xlsx','.ppt','.pptx',
+               '.odt','.ods','.odp','.pages','.numbers','.key','.epub',
+               '.md','.rst','.txt','.tex','.man'}
+CODE_EXT    = {'.py','.js','.ts','.jsx','.tsx','.rs','.go','.c','.cpp',
+               '.h','.hpp','.java','.kt','.swift','.rb','.php','.sh',
+               '.bash','.zsh','.fish','.lua','.r','.m','.cs','.vb',
+               '.hs','.elm','.clj','.ex','.exs','.erl','.ml','.fs',
+               '.nim','.zig','.dart','.scala','.pl','.pm','.tf','.hcl'}
+DATA_EXT    = {'.json','.yaml','.yml','.toml','.ini','.cfg','.conf',
+               '.xml','.csv','.tsv','.sql','.db','.sqlite','.env',
+               '.lock','.sum','.mod'}
+
+# Plain Unicode icons — no Nerd Font needed
+ICONS = {
+    'dir'     : '[d] ',
+    'link'    : '[~] ',
+    'exec'    : '[*] ',
+    'archive' : '[z] ',
+    'media'   : '[m] ',
+    'doc'     : '[D] ',
+    'code'    : '[c] ',
+    'data'    : '[j] ',
+    'special' : '[!] ',
+    'hidden'  : '[.] ',
+    'file'    : '[-] ',
+}
+
+def classify(path, st):
+    mode = st.st_mode
+    if stat.S_ISDIR(mode):   return 'dir',     C_DIR,     ICONS['dir']
+    if stat.S_ISLNK(mode):   return 'link',    C_LINK,    ICONS['link']
+    if stat.S_ISBLK(mode) or stat.S_ISCHR(mode) or \
+       stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode):
+                              return 'special', C_SPECIAL, ICONS['special']
+    ext = path.suffix.lower()
+    if mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
+                              return 'exec',    C_EXEC,    ICONS['exec']
+    if ext in ARCHIVE_EXT:   return 'archive', C_ARCHIVE, ICONS['archive']
+    if ext in MEDIA_EXT:     return 'media',   C_MEDIA,   ICONS['media']
+    if ext in DOC_EXT:       return 'doc',     C_DOC,     ICONS['doc']
+    if ext in CODE_EXT:      return 'code',    C_CODE,    ICONS['code']
+    if ext in DATA_EXT:      return 'data',    C_DATA,    ICONS['data']
+    if path.name.startswith('.'): return 'hidden', C_HIDDEN, ICONS['hidden']
+    return 'file', RESET+BOLD, ICONS['file']
+
+GROUP_ORDER = ['dir','exec','code','data','doc','media','archive','link','special','hidden','file']
+GROUP_LABELS = {
+    'dir':'Directories','exec':'Executables','code':'Source Code',
+    'data':'Data / Config','doc':'Documents','media':'Media',
+    'archive':'Archives','link':'Symlinks','special':'Special Files',
+    'hidden':'Hidden','file':'Files',
+}
+
+def human_size(n):
+    if n == 0: return "0 B"
+    units = ['B','KB','MB','GB','TB','PB']
+    exp = min(int(math.log(max(n,1), 1024)), len(units)-1)
+    val = n / (1024**exp)
+    return f"{int(val)} {units[exp]}" if exp == 0 else f"{val:.1f} {units[exp]}"
+
+def perms_str(mode):
+    kinds = {stat.S_IFREG:'-',stat.S_IFDIR:'d',stat.S_IFLNK:'l',
+             stat.S_IFBLK:'b',stat.S_IFCHR:'c',stat.S_IFIFO:'p',stat.S_IFSOCK:'s'}
+    ft = kinds.get(stat.S_IFMT(mode), '?')
+    bits = [('r',stat.S_IRUSR),('w',stat.S_IWUSR),('x',stat.S_IXUSR),
+            ('r',stat.S_IRGRP),('w',stat.S_IWGRP),('x',stat.S_IXGRP),
+            ('r',stat.S_IROTH),('w',stat.S_IWOTH),('x',stat.S_IXOTH)]
+    return ft + ''.join(c if mode & b else '-' for c, b in bits)
+
+def mtime_str(ts):
+    t = time.localtime(ts)
+    if abs(time.time() - ts) < 180*86400:
+        return time.strftime("%b %d %H:%M", t)
+    return time.strftime("%b %d  %Y",  t)
+
+def owner_name(uid):
+    try:    return pwd.getpwuid(uid).pw_name
+    except: return str(uid)
+
+def group_name(gid):
+    try:    return grp.getgrgid(gid).gr_name
+    except: return str(gid)
+
+def link_target(path):
+    try:
+        tgt    = os.readlink(path)
+        exists = os.path.exists(path)
+        mark   = "" if exists else f" {C_SPECIAL}[broken]{RESET}"
+        return f"  {C_LINKTGT}-> {tgt}{RESET}{mark}"
+    except OSError:
+        return ""
+
+def term_width():
+    try:    return os.get_terminal_size().columns
+    except: return 80
+
+def gather(directory, show_hidden, follow_links):
+    entries = []
+    try:    names = os.listdir(directory)
+    except PermissionError:
+        print(f"{C_SPECIAL}Permission denied: {directory}{RESET}", file=sys.stderr)
+        return entries
+    for name in sorted(names, key=lambda s: s.lstrip('.').lower()):
+        if not show_hidden and name.startswith('.'): continue
+        path = directory / name
+        try:    st = path.stat() if follow_links else path.lstat()
+        except: continue
+        kind, color, icon = classify(path, st)
+        entries.append({'path':path,'name':name,'st':st,'kind':kind,'color':color,'icon':icon})
+    return entries
+
+def print_section_header(label, count, width):
+    left  = f"  {label} "
+    right = f" {count} item{'s' if count != 1 else ''}  "
+    dashes = '─' * max(width - len(left) - len(right), 4)
+    print(f"\n{BOLD}{C_SECTION}{left}{RESET}{C_SECTION}{dashes}{RESET}{C_COUNT}{BOLD}{right}{RESET}")
+
+def print_long(entry, max_user, max_group, max_size):
+    st     = entry['st']
+    perms  = perms_str(st.st_mode)
+    user   = owner_name(st.st_uid)
+    group  = group_name(st.st_gid)
+    size   = human_size(st.st_size)
+    mtime  = mtime_str(st.st_mtime)
+    color  = entry['color']
+    icon   = entry['icon']
+    name   = entry['name']
+    linfo  = link_target(entry['path']) if entry['kind'] == 'link' else ""
+
+    print(
+        f"  {C_PERMS}{perms}{RESET}  "
+        f"{C_NLINK}{st.st_nlink:2d}{RESET}  "
+        f"{C_USER}{user:<{max_user}}{RESET}  "
+        f"{C_GROUP}{group:<{max_group}}{RESET}  "
+        f"{C_SIZE}{size:>{max_size + 3}}{RESET}  "
+        f"{C_DATE}{mtime}{RESET}  "
+        f"{color}{BOLD}{icon}{name}{RESET}"
+        f"{linfo}"
+    )
+
+def print_grid(entries, width):
+    if not entries: return
+    names = [f"{e['icon']}{e['name']}" for e in entries]
+    max_w = max(len(n) for n in names) + 2
+    cols  = max(1, (width - 4) // max_w)
+    for i, (entry, name) in enumerate(zip(entries, names)):
+        end = "\n" if (i+1) % cols == 0 or i == len(entries)-1 else ""
+        print(f"  {entry['color']}{BOLD}{name:<{max_w}}{RESET}", end=end)
+
+def main():
+    p = argparse.ArgumentParser(prog='ll', description='A richer ls: colors, groups, and file info.')
+    p.add_argument('paths', nargs='*', default=['.'], metavar='PATH')
+    p.add_argument('-a','--all',         action='store_true', help='Show hidden files')
+    p.add_argument('-l','--long',        action='store_true', help='Long format with details')
+    p.add_argument('-G','--no-groups',   action='store_true', help='Disable type grouping')
+    p.add_argument('-L','--follow-links',action='store_true', help='Follow symlinks when stating')
+    p.add_argument('-s','--summary',     action='store_true', help='Print summary line')
+    args = p.parse_args()
+
+    use_groups = not args.no_groups
+    width      = term_width()
+
+    for target_str in args.paths:
+        target = Path(target_str)
+        if len(args.paths) > 1:
+            print(f"\n{C_DIR}{BOLD}{'─'*3} {target} {'─'*max(0,width-6-len(str(target)))}{RESET}")
+
+        if target.is_file():
+            st = target.lstat()
+            kind, color, icon = classify(target, st)
+            entries = [{'path':target,'name':target.name,'st':st,'kind':kind,'color':color,'icon':icon}]
+        else:
+            entries = gather(target, args.all, args.follow_links)
+
+        if not entries:
+            print(f"  {DIM}(empty){RESET}")
+            continue
+
+        max_user  = max(len(owner_name(e['st'].st_uid)) for e in entries)
+        max_group = max(len(group_name(e['st'].st_gid)) for e in entries)
+        max_size  = max(len(human_size(e['st'].st_size)) for e in entries)
+
+        if use_groups:
+            by_kind = {}
+            for e in entries:
+                by_kind.setdefault(e['kind'], []).append(e)
+            for kind in GROUP_ORDER:
+                grp_entries = by_kind.get(kind)
+                if not grp_entries: continue
+                print_section_header(GROUP_LABELS[kind], len(grp_entries), width)
+                if args.long:
+                    for e in grp_entries: print_long(e, max_user, max_group, max_size)
+                else:
+                    print_grid(grp_entries, width)
+        else:
+            if args.long:
+                for e in entries: print_long(e, max_user, max_group, max_size)
+            else:
+                print_grid(entries, width)
+
+        if args.summary:
+            dirs  = sum(1 for e in entries if e['kind'] == 'dir')
+            files = len(entries) - dirs
+            total = sum(e['st'].st_size for e in entries if e['kind'] != 'dir')
+            print(f"\n  {C_SECTION}{len(entries)} items  ({dirs} dirs, {files} files)  {human_size(total)} total{RESET}")
+        print()
+
+if __name__ == '__main__':
+    main()
