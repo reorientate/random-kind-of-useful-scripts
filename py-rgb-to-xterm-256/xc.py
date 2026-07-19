@@ -1,4 +1,4 @@
-def xc(text: str, r: int, g: int, b: int) -> str:
+def xcol(text: str, r: int, g: int, b: int) -> str:
     """
     Converts RGB to an xterm-256color ANSI sequence 
     and returns it as a string.
@@ -12,10 +12,10 @@ def xc(text: str, r: int, g: int, b: int) -> str:
     return f"\033[38;5;{color_code}m{text}\033[0m"
 
 if __name__ == "__main__":
-	print(gxt.gxt("████████████████████ This is dark pink", 198, 71, 148))
-	print(gxt.gxt("████████████████████ This is pink", 251, 168, 250))
-	print(gxt.gxt("████████████████████ This is white", 225, 255, 255))
-	print(gxt.gxt("████████████████████ This is blue", 75, 196, 244))
-	print(gxt.gxt("████████████████████ This is white", 225, 255, 255))
-	print(gxt.gxt("████████████████████ This is pink", 251, 168, 250))
-	print(gxt.gxt("████████████████████ This is dark pink", 198, 71, 148))
+    print(xcol("████████████████████ This is dark pink", 198, 71, 148))
+    print(xcol("████████████████████ This is pink", 251, 168, 250))
+    print(xcol("████████████████████ This is white", 225, 255, 255))
+    print(xcol("████████████████████ This is blue", 75, 196, 244))
+    print(xcol("████████████████████ This is white", 225, 255, 255))
+    print(xcol("████████████████████ This is pink", 251, 168, 250))
+    print(xcol("████████████████████ This is dark pink", 198, 71, 148))
