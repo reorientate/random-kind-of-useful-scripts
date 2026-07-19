@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+import subprocess
+import sys
+import platform
+from colorama import Fore as f
+
+# pgrep -lf app | cut -b 1-75
+
+def find_processes(target):
+    """Find processes matching the target name or PID."""
+    try:
+        if platform.system() == "Windows":
+            result = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {target}*"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if result.stdout:
+                lines = result.stdout.strip().split('\n')[3:]  # Skip header
+                return [line for line in lines if line.strip()]
+        else:
+            result = subprocess.run(
+                ["pgrep", "-i", "-l", target],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if result.stdout:
+                return result.stdout.strip().split('\n')
+        return []
+    except Exception as e:
+        print(f"Error searching for processes: {e}")
+        return []
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: akill <process_name_or_pid>")
+        sys.exit(1)
+    
+    target = sys.argv[1]
+    processes = find_processes(target)
+    
+    if not processes:
+        print(f"{f.YELLOW}[?]{f.RESET} No process found matching: {target}")
+        sys.exit(1)
+    
+    print(f"Found process(es):")
+    for i, proc in enumerate(processes):
+        print(f"{f.GREEN}[{i}]{f.RESET} {proc}")
+    
+    try:
+        choice = input("Enter process index ('q' to quit): ").strip()
+        if choice.lower() == 'q':
+            sys.exit(0)
+        
+        index = int(choice)
+        selected_line = processes[index]
+        
+        if platform.system() == "Windows":
+            pid = selected_line.split()[1]
+            subprocess.run(["taskkill", "/PID", pid, "/F"], check=True)
+        else:
+            pid = selected_line.split()[0]
+            subprocess.run(["kill", "-9", pid], check=True)
+        
+        print(f"Killed process: {selected_line}")
+    except (ValueError, IndexError):
+        print(f"{f.YELLOW}[?]{f.RESET} Invalid selection")
+        sys.exit(1)
+    except subprocess.CalledProcessError:
+        print(f"{f.RED}[!]{f.RESET} Failed to kill process")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
