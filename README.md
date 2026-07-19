@@ -21,3 +21,4 @@ a better version of ls
 
 <img width="671" height="464" alt="Screen Shot 2026-07-19 at 4 25 01 AM" src="https://github.com/user-attachments/assets/c5eb4555-eed5-40e5-bdca-21db931988a1" />
 
+> A lot more coming soon!
